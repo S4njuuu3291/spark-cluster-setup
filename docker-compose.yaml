@@ -1,0 +1,63 @@
+# docker.compose.yaml
+services:
+  spark-master:
+    image: apache/spark:4.3.0-scala2.13-java21-python3-ubuntu
+    hostname: spark-master
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+      --host spark-master --port 7077 --webui-port 8080
+    ports:
+      - "8080:8080" # Web UI
+      - "7077:7077" # RPC master
+
+    mem_limit: 2g
+    networks:
+      - spark-net
+
+  spark-worker:
+    image: apache/spark:4.3.0-scala2.13-java21-python3-ubuntu
+    hostname: spark-worker
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
+      spark://spark-master:7077
+    environment:
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=4g
+    depends_on:
+      - spark-master
+    volumes:
+      - .:/opt/spark/work-dir
+
+    mem_limit: 5g 
+    networks:
+        - spark-net
+
+  spark-connect:
+    image: apache/spark:4.3.0-scala2.13-java21-python3-ubuntu
+    hostname: spark-connect
+    command: >
+      /opt/spark/bin/spark-submit
+      --class org.apache.spark.sql.connect.service.SparkConnectServer
+      --master spark://spark-master:7077
+      --conf spark.driver.host=spark-connect
+      --conf spark.driver.bindAddress=0.0.0.0
+      --conf spark.cores.max=2
+      --conf spark.executor.cores=1
+      --conf spark.executor.memory=1g
+    ports:
+      - "15002:15002"      # gRPC Connect
+      - "4040:4040"        # UI application
+    depends_on: [spark-master]
+    networks: [spark-net]
+    mem_limit: 2g
+
+  spark-client:
+    image: apache/spark:4.3.0-scala2.13-java21-python3-ubuntu
+    hostname: spark-client
+    command: sleep infinity            # container hidup, kita submit dari dalamnya
+    volumes: 
+      - .:/opt/spark/work-dir
+    networks: [spark-net]
+
+networks:
+  spark-net:
